@@ -1,8 +1,9 @@
 import time
 import uuid
-from datetime import datetime
+from extensions import db
+from app.models.job import JobStatus
 from app.repositories.job_repositories import JobRepository
-
+from app.services.rate_limiter_service import RateLimiterService
 
 class WorkerService:
 
@@ -10,6 +11,10 @@ class WorkerService:
         self.worker_id = f"worker-{uuid.uuid4()}"
         self.lock_timeout = lock_timeout
         self.poll_interval = poll_interval
+        self.rate_limiter = RateLimiterService(
+            capacity=50,
+            refill_rate=5
+        )
 
     # Main Loop
     def start(self):
@@ -35,6 +40,15 @@ class WorkerService:
     # Process Job
     def process_job(self, job):
         try:
+            # Rate limit actual execution
+            if not self.rate_limiter.allow_request("worker"):
+              job.locked_at = None
+              job.locked_by = None
+              job.status = JobStatus.PENDING
+              db.session.commit()
+              time.sleep(1)
+              return
+
             print(f"[WorkerService] Processing {job.id}")
 
             # Simulated execution

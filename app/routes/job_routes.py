@@ -1,14 +1,23 @@
-# app/routes/job_routes.py
-
 from flask import Blueprint, request, jsonify
 from app.services.job_service import JobService
+from app.services.rate_limiter_service import RateLimiterService
 
 job_bp = Blueprint("jobs", __name__, url_prefix="/jobs")
 
-# Create Job
+# Create Job Endpoint
 @job_bp.route("/", methods=["POST"])
 def create_job():
     data = request.get_json()
+
+    client_id = request.headers.get("X-Client-ID")
+
+    if not client_id:
+        return jsonify({"error": "Missing X-Client-ID header"}), 400
+
+    rate_limiter = RateLimiterService(capacity=20, refill_rate=2)
+
+    if not rate_limiter.allow_request(client_id):
+        return jsonify({"error": "Rate limit exceeded"}), 429
 
     if not data or "type" not in data or "payload" not in data:
         return jsonify({"error": "Invalid request"}), 400
@@ -17,8 +26,7 @@ def create_job():
 
     return jsonify({
         "id": str(job.id),
-        "status": job.status.value,
-        "priority": job.priority
+        "status": job.status.value
     }), 201
 
 # Get Job Status
