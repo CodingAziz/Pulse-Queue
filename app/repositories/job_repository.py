@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models.job import Job, JobStatus
 from app.utils.locking import release_stale_locks
 from app.services.retry_service import RetryService
+from app.repositories.dead_letter_repository import DeadLetterRepository
 
 class JobRepository:
 
@@ -120,7 +121,9 @@ class JobRepository:
 
     # Fail Job (Exponential Backoff)
     @staticmethod
-    def fail_job(job: Job, error: Exception):
+    def fail_job(job, error):
+        from app.services.retry_service import RetryService
+
         retry_service = RetryService()
 
         job.attempts += 1
@@ -129,12 +132,11 @@ class JobRepository:
         job.locked_by = None
 
         if job.attempts >= job.max_attempts:
-            job.status = JobStatus.DEAD
-        else:
-            job.status = JobStatus.RETRY
-            job.available_at = retry_service.calculate_next_retry(
-                job.attempts
-            )
+            DeadLetterRepository.move_to_dead_letter(job)
+            return
+
+        job.status = JobStatus.RETRY
+        job.available_at = retry_service.calculate_next_retry(job.attempts)
 
         db.session.commit()
 

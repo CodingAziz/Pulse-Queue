@@ -1,5 +1,5 @@
 from datetime import datetime
-from app.repositories.job_repositories import JobRepository
+from app.repositories.job_repository import JobRepository
 
 
 class JobService:

@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.services.job_service import JobService
 from app.services.rate_limiter_service import RateLimiterService
+from app.services.dead_letter_service import DeadLetterService
 
 job_bp = Blueprint("jobs", __name__, url_prefix="/jobs")
 
@@ -43,6 +44,17 @@ def get_job(job_id):
         "attempts": job.attempts,
         "last_error": job.last_error
     })
+
+# Dead Letter Queue Job Blueprint
+@job_bp.route("/dead-letter/<dlq_id>/replay", methods=["POST"])
+def replay_dead_letter(dlq_id):
+
+    job = DeadLetterService.replay_job(dlq_id)
+
+    if not job:
+        return jsonify({"error": "Dead letter job not found"}), 404
+
+    return jsonify({"replayed_job_id": str(job.id)})
 
 # Metrics Endpoint
 @job_bp.route("/metrics", methods=["GET"])
