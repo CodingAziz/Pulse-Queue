@@ -1,24 +1,18 @@
-import os
 from flask import Flask
+from config import Config
 from .extensions import db
+from .routes.job_routes import job_bp
+
 
 def create_app():
     app = Flask(__name__)
-
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-    DB_PATH = os.path.join(BASE_DIR, "../pulsequeue.db")
-
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config.from_object(Config)
 
     db.init_app(app)
-    
-    @app.route("/")
-    def health():
-        return {"status": "PulseQueue API running"}
 
-    # Register blueprints
-    from .routes.jobs import jobs_bp
-    app.register_blueprint(jobs_bp)
+    with app.app_context():
+        db.create_all()
+
+    app.register_blueprint(job_bp)
 
     return app
