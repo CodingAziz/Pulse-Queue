@@ -5,3 +5,5 @@ python-dotenv
 marshmallow
 redis
 gunicorn
+pytest
+pytest-flask

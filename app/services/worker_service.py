@@ -4,6 +4,8 @@ from extensions import db
 from app.models.job import JobStatus
 from app.repositories.job_repository import JobRepository
 from app.services.rate_limiter_service import RateLimiterService
+import logging
+from datetime import datetime
 
 class WorkerService:
 
@@ -15,6 +17,7 @@ class WorkerService:
             capacity=50,
             refill_rate=5
         )
+        self.logger = logging.getLogger("WorkerService")
 
     # Main Loop
     def start(self):
@@ -39,22 +42,33 @@ class WorkerService:
 
     # Process Job
     def process_job(self, job):
-        try:
-            # Rate limit actual execution
-            if not self.rate_limiter.allow_request("worker"):
-              job.locked_at = None
-              job.locked_by = None
-              job.status = JobStatus.PENDING
-              db.session.commit()
+      try:
+          start_time = datetime.utcnow()
+
+          if not self.rate_limiter.allow_request("worker"):
+              self.logger.warning("Worker rate limited")
               time.sleep(1)
               return
 
-            print(f"[WorkerService] Processing {job.id}")
+          self.logger.info(f"Processing job {job.id}")
 
-            # Simulated execution
-            time.sleep(3)
+          # Simulated execution
+          time.sleep(3)
 
-            JobRepository.complete_job(job)
+          execution_time = (
+              datetime.utcnow() - start_time
+          ).total_seconds() * 1000
 
-        except Exception as e:
-            JobRepository.fail_job(job, e)
+          job.execution_time_ms = int(execution_time)
+
+          JobRepository.complete_job(job)
+
+          self.logger.info(
+              f"Completed job {job.id} in {execution_time:.2f} ms"
+          )
+
+      except Exception as e:
+          self.logger.error(
+              f"Job {job.id} failed: {str(e)}"
+          )
+          JobRepository.fail_job(job, e)

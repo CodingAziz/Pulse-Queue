@@ -59,8 +59,14 @@ def replay_dead_letter(dlq_id):
 # Metrics Endpoint
 @job_bp.route("/metrics", methods=["GET"])
 def metrics():
+
     stats = JobService.get_stats()
 
+    total_jobs = sum(count for _, count in stats)
+
     return jsonify({
-        status.value: count for status, count in stats
+        "total_jobs": total_jobs,
+        "status_breakdown": {
+            status.value: count for status, count in stats
+        }
     })
