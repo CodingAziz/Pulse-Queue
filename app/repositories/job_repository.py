@@ -20,7 +20,7 @@ class JobRepository:
         idempotency_key: str = None,
         max_attempts: int = 5
     ) -> Job:
-
+      try:
         if idempotency_key:
             existing = Job.query.filter_by(
                 idempotency_key=idempotency_key
@@ -48,10 +48,14 @@ class JobRepository:
         db.session.add(job)
         db.session.commit()
         return job
+      except Exception as e:
+          db.session.rollback()
+          print("[ERROR] Exception occured in creating job")
 
     # Fetch Due Scheduled Jobs
     @staticmethod
     def fetch_due_scheduled_jobs(limit: int = 100):
+      try:
         now = datetime.utcnow()
 
         return (
@@ -64,14 +68,20 @@ class JobRepository:
             .limit(limit)
             .all()
         )
+      except Exception as e:
+        print("[ERROR] Exception occured")
     
     @staticmethod
     def promote_scheduled_jobs(jobs):
+      try:
         for job in jobs:
             job.status = JobStatus.PENDING
             job.available_at = datetime.utcnow()
 
         db.session.commit()
+      except Exception as e:
+        db.session.rollback()
+        print("[ERROR] Exception occured")
 
     # Fetch Next Available Job (LOCKED)
     @staticmethod
@@ -79,66 +89,77 @@ class JobRepository:
         """
         Priority scheduling with starvation prevention (aging).
         """
+        try:
+          now = datetime.utcnow()
 
-        now = datetime.utcnow()
+          # Aging factor: 1 priority point per 30 seconds waited
+          aging_seconds = 30
 
-        # Aging factor: 1 priority point per 30 seconds waited
-        aging_seconds = 30
+          effective_priority = (
+              Job.priority +
+              (func.extract('epoch', now - Job.created_at) / aging_seconds)
+          )
 
-        effective_priority = (
-            Job.priority +
-            (func.extract('epoch', now - Job.created_at) / aging_seconds)
-        )
+          job = (
+              Job.query
+              .filter(
+                  Job.status.in_([JobStatus.PENDING, JobStatus.RETRY]),
+                  Job.available_at <= now,
+                  Job.locked_at.is_(None)
+              )
+              .order_by(
+                  effective_priority.desc(),
+                  Job.available_at.asc()
+              )
+              .with_for_update(skip_locked=True)
+              .first()
+          )
 
-        job = (
-            Job.query
-            .filter(
-                Job.status.in_([JobStatus.PENDING, JobStatus.RETRY]),
-                Job.available_at <= now,
-                Job.locked_at.is_(None)
-            )
-            .order_by(
-                effective_priority.desc(),
-                Job.available_at.asc()
-            )
-            .with_for_update(skip_locked=True)
-            .first()
-        )
+          if not job:
+              return None
 
-        if not job:
-            return None
+          job.mark_running(worker_id)
+          db.session.commit()
 
-        job.mark_running(worker_id)
-        db.session.commit()
-
-        return job
+          return job
+        except Exception as e:
+          db.session.rollback()
+          print("[ERROR] Exception occured")
 
     # Complete Job
     @staticmethod
     def complete_job(job: Job):
-        job.mark_completed()
-        db.session.commit()
+        try:
+          job.mark_completed()
+          db.session.commit()
+        except Exception as e:
+          db.session.rollback()
+          print("[ERROR] Exception occured")
 
     # Fail Job (Exponential Backoff)
     @staticmethod
     def fail_job(job, error):
-        from app.services.retry_service import RetryService
+        try:
+          from app.services.retry_service import RetryService
 
-        retry_service = RetryService()
+          retry_service = RetryService()
 
-        job.attempts += 1
-        job.last_error = str(error)
-        job.locked_at = None
-        job.locked_by = None
+          job.attempts += 1
+          job.last_error = str(error)
+          job.locked_at = None
+          job.locked_by = None
 
-        if job.attempts >= job.max_attempts:
-            DeadLetterRepository.move_to_dead_letter(job)
-            return
+          if job.attempts >= job.max_attempts:
+              DeadLetterRepository.move_to_dead_letter(job)
+              return
 
-        job.status = JobStatus.RETRY
-        job.available_at = retry_service.calculate_next_retry(job.attempts)
+          job.status = JobStatus.RETRY
+          job.available_at = retry_service.calculate_next_retry(job.attempts)
 
-        db.session.commit()
+          db.session.commit()
+        except Exception as e:
+          db.session.rollback()
+          print("[ERROR] Exception occured")
 
     # Recover Stale Locks (Visibility Timeout)
     @staticmethod

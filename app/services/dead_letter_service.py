@@ -8,7 +8,7 @@ class DeadLetterService:
 
     @staticmethod
     def replay_job(dlq_id):
-
+      try:
         dlq_job = DeadLetterJob.query.get(dlq_id)
 
         if not dlq_job:
@@ -24,3 +24,6 @@ class DeadLetterService:
         db.session.commit()
 
         return new_job
+      except Exception as e:
+        db.session.rollback()
+        print("[ERROR] Exception occured")

@@ -10,32 +10,35 @@ def release_stale_locks(timeout_seconds: int = 60) -> int:
 
     Returns number of jobs recovered.
     """
+    try:
+      now = datetime.utcnow()
+      stale_threshold = now - timedelta(seconds=timeout_seconds)
 
-    now = datetime.utcnow()
-    stale_threshold = now - timedelta(seconds=timeout_seconds)
+      # Use FOR UPDATE to avoid multiple workers recovering same jobs
+      stale_jobs = (
+          Job.query
+          .filter(
+              and_(
+                  Job.status == JobStatus.RUNNING,
+                  Job.locked_at.isnot(None),
+                  Job.locked_at < stale_threshold
+              )
+          )
+          .with_for_update(skip_locked=True)
+          .all()
+      )
 
-    # Use FOR UPDATE to avoid multiple workers recovering same jobs
-    stale_jobs = (
-        Job.query
-        .filter(
-            and_(
-                Job.status == JobStatus.RUNNING,
-                Job.locked_at.isnot(None),
-                Job.locked_at < stale_threshold
-            )
-        )
-        .with_for_update(skip_locked=True)
-        .all()
-    )
+      recovered_count = 0
 
-    recovered_count = 0
+      for job in stale_jobs:
+          job.status = JobStatus.PENDING
+          job.locked_at = None
+          job.locked_by = None
+          recovered_count += 1
 
-    for job in stale_jobs:
-        job.status = JobStatus.PENDING
-        job.locked_at = None
-        job.locked_by = None
-        recovered_count += 1
+      db.session.commit()
 
-    db.session.commit()
-
-    return recovered_count
+      return recovered_count
+    except Exception as e:
+      db.session.rollback()
+      print(f"[Locking] Error releasing stale locks: {e}")

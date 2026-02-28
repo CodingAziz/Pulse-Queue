@@ -6,7 +6,7 @@ class DeadLetterRepository:
 
     @staticmethod
     def move_to_dead_letter(job, reason="max_attempts_exceeded"):
-
+      try:
         dlq_job = DeadLetterJob(
             original_job_id=job.id,
             type=job.type,
@@ -21,3 +21,6 @@ class DeadLetterRepository:
         db.session.commit()
 
         return dlq_job
+      except Exception as e:
+        db.session.rollback()
+        print("[ERROR] Exception occured in Dead Letter Queue")

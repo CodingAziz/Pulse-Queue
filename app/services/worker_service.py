@@ -1,6 +1,6 @@
 import time
 import uuid
-from extensions import db
+from app.extensions import db
 from app.models.job import JobStatus
 from app.repositories.job_repository import JobRepository
 from app.services.rate_limiter_service import RateLimiterService

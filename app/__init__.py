@@ -12,9 +12,6 @@ def create_app():
 
     db.init_app(app)
 
-    with app.app_context():
-        db.create_all()
-
     app.register_blueprint(health_bp)
     app.register_blueprint(job_bp)
 

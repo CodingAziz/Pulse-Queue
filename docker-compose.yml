@@ -35,6 +35,16 @@ services:
       timeout: 3s
       retries: 5
 
+  db_init:
+      build: .
+      command: python init_db.py
+      depends_on:
+        postgres:
+          condition: service_healthy
+      environment:
+        - DATABASE_URL=postgresql://admin:admin7865253@postgres:5432/pulsequeue
+      restart: "no"
+
   api:
     build:
       context: .
@@ -48,6 +58,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db_init:
+        condition: service_completed_successfully
     ports:
       - "8000:5000"
     command: >
@@ -70,6 +82,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db_init:
+        condition: service_completed_successfully
     command: python worker.py
 
   scheduler:
@@ -85,6 +99,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db_init:
+        condition: service_completed_successfully
     command: python scheduler.py
 
 
