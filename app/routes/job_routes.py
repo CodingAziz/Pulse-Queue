@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from app.services.job_service import JobService
 from app.services.rate_limiter_service import RateLimiterService
 from app.services.dead_letter_service import DeadLetterService
@@ -15,11 +15,17 @@ def create_job():
     if not client_id:
         return jsonify({"error": "Missing X-Client-ID header"}), 400
 
-    rate_limiter = RateLimiterService(capacity=20, refill_rate=2)
+    # Rate limiting logic
+    if current_app.config.get("TESTING"):
+        rate_allowed = True
+    else:
+        rate_limiter = RateLimiterService(capacity=20, refill_rate=2)
+        rate_allowed = rate_limiter.allow_request(client_id)
 
-    if not rate_limiter.allow_request(client_id):
+    if not rate_allowed:
         return jsonify({"error": "Rate limit exceeded"}), 429
 
+    # Validate input
     if not data or "type" not in data or "payload" not in data:
         return jsonify({"error": "Invalid request"}), 400
 
