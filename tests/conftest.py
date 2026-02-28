@@ -1,15 +1,17 @@
 import pytest
 from app import create_app
 from app.extensions import db
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
 @pytest.fixture(scope="session")
 def app():
     app = create_app()
 
     app.config.update({
-        "SQLALCHEMY_DATABASE_URI":
-            "postgresql+psycopg2://pulse:pulsepass@localhost:5432/pulsequeue_test",
+        "SQLALCHEMY_DATABASE_URI": os.getenv("DATABASE_TEST_URL", ""),
         "TESTING": True
     })
 
