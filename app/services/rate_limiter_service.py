@@ -1,11 +1,11 @@
 import time
+from app.extensions import redis_client as default_redis
 
 class RateLimiterService:
 
     def __init__(self, capacity=10, refill_rate=1.0, redis_client=None):
         self.capacity = capacity
         self.refill_rate = refill_rate
-        from app.extensions import redis_client as default_redis
         self.redis = redis_client or default_redis
 
     def _get_bucket_key(self, client_id: str) -> str:

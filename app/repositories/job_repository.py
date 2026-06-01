@@ -7,10 +7,11 @@ from app.models.job import Job, JobStatus
 from app.utils.locking import release_stale_locks
 from app.services.retry_service import RetryService
 from app.repositories.dead_letter_repository import DeadLetterRepository
+from app.services.retry_service import RetryService
 
 class JobRepository:
 
-    # Create Job (Idempotent Safe)
+    # Create a new job
     @staticmethod
     def create_job(
         type: str,
@@ -52,7 +53,7 @@ class JobRepository:
           db.session.rollback()
           print("[ERROR] Exception occured in creating job")
 
-    # Fetch Due Scheduled Jobs
+    # Fetch scheduled jobs
     @staticmethod
     def fetch_due_scheduled_jobs(limit: int = 100):
       try:
@@ -71,6 +72,7 @@ class JobRepository:
       except Exception as e:
         print("[ERROR] Exception occured")
     
+    # Promote scheduled jobs
     @staticmethod
     def promote_scheduled_jobs(jobs):
       try:
@@ -83,7 +85,7 @@ class JobRepository:
         db.session.rollback()
         print("[ERROR] Exception occured")
 
-    # Fetch Next Available Job (LOCKED)
+    # Fetch next job
     @staticmethod
     def fetch_next_job(worker_id: str):
         """
@@ -94,12 +96,10 @@ class JobRepository:
 
           # Aging factor: 1 priority point per 30 seconds waited
           aging_seconds = 30
-
           effective_priority = (
               Job.priority +
               (func.extract('epoch', now - Job.created_at) / aging_seconds)
           )
-
           job = (
               Job.query
               .filter(
@@ -140,8 +140,6 @@ class JobRepository:
     @staticmethod
     def fail_job(job, error):
         try:
-          from app.services.retry_service import RetryService
-
           retry_service = RetryService()
 
           job.attempts += 1
